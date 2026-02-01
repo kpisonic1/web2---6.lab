@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#ffffff">
+  <title>Puppy Yoga</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles/styles.css">
+</head>
+<body>
+  <div class="topbar"></div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <button class="dot" id="btnPush" title="Enable Push"></button>
+      <div class="labelbox" id="pushLabel">Enable Push</div>
+
+      <button class="dot orange" id="btnNotify" title="Notify me"></button>
+      <div class="labelbox">Notify me</div>
+
+      <button class="dot peach" id="btnCreate" title="Create new session"></button>
+      <div class="labelbox">Create session</div>
+
+      <div class="hint">
+        <p>For testing offline: DevTools → Network → Offline</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <h1>Puppy Yoga</h1>
+      <p class="sub">
+        Puppy sessions recorded with: camera, background sync, and push.
+      </p>
+
+      <section class="card">
+        <h2>Instructions</h2>
+        <ol>
+          <li>Click <strong>Create session</strong>, take a photo, save while offline.</li>
+          <li>Go online → Background Sync uploads it.</li>
+          <li>Server sends push: Session synced</li>
+        </ol>
+        <div id="status" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>Latest puppy sessions</h2>
+        <div id="list" class="workoutList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    import { enablePush, disablePush, getPushSubscription, supportsPush } from "/push.js";
+
+    //dom elements
+    const statusEl = document.getElementById("status");
+    const btnPush = document.getElementById("btnPush");
+    const pushLabel = document.getElementById("pushLabel");
+
+    const setStatus = (msg) => { statusEl.textContent = msg; };
+
+    //provjera podrzava li broswer sw
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js", { type: "module" })
+        .then(() => console.log("SW registered"))
+        .catch((e) => setStatus("Service worker failed " + (e?.message || "")));
+    } else {
+      setStatus("No Service Worker support");
+    }
+
+    //funkcija za button koji omogucuje push
+    function setPushUI(isEnabled) {
+      if (isEnabled) {
+        btnPush.classList.add("red");
+        pushLabel.textContent = "Disable Push";
+        btnPush.title = "Disable Push";
+      } else {
+        btnPush.classList.remove("red");
+        pushLabel.textContent = "Enable Push";
+        btnPush.title = "Enable Push";
+      }
+    }
+
+    //funkcija koja provjerava je li push available i ako nije zasto nije
+    //i je li push enablean
+    async function initPushState() {
+      try {
+        const support = supportsPush();
+        if (!support.ok) {
+          setPushUI(false);
+          setStatus(
+            "Push not available (" +
+            (!support.hasSW ? "no SW" : !support.hasNotif ? "no Notification" : "no PushManager") +
+            ")"
+          );
+          return;
+        }
+
+        const sub = await getPushSubscription();
+        if (sub) {
+          setPushUI(true);
+          setStatus("push enabled");
+        } else {
+          setPushUI(false);
+          setStatus("push not enabled (click to enable it)");
+        }
+      } catch (e) {
+        setPushUI(false);
+        setStatus("push init error: " + (e?.message || e));
+      }
+    }
+
+    //za glavnu provjeru enableanja, odnosno disableanja pusha
+    btnPush.addEventListener("click", async () => {
+      try {
+        const support = supportsPush();
+        if (!support.ok) {
+          setStatus(
+            "push not available " +
+            (!support.hasSW ? "no SW" : !support.hasNotif ? "no Notification" : "no PushManager") 
+          );
+          return;
+        }
+
+        const current = await getPushSubscription();
+        //ako je trenutno enablean, disableaj ga
+        if (current) {
+          setStatus("disabling push");
+          const res = await disablePush();
+          if (res.ok) {
+            setPushUI(false);
+            setStatus("push disabled");
+          } else {
+            setStatus("couldn't disable push: " + (res.detail || res.reason));
+          }
+          return;
+        }
+
+        setStatus("enabling push");
+        const result = await enablePush();
+        if (result.ok) {
+          setPushUI(true);
+          setStatus("push enabled");
+        } else {
+          setPushUI(false);
+          setStatus("push not enabled: " + (result.detail || result.reason));
+        }
+      } catch (e) {
+        setPushUI(false);
+        setStatus("push error: " + (e?.message || e));
+      }
+    });
+
+    //za notification api bez server push
+    document.getElementById("btnNotify").addEventListener("click", async () => {
+      if (!("Notification" in window)) {
+        setStatus("notif not supported");
+        return;
+      }
+
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setStatus("notif permission denied");
+        return;
+      }
+
+      setStatus("Cool okay! Notif in 3 seconds");
+
+      setTimeout(async () => {
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          reg.showNotification("Puppy Yoga reminder", {
+            body: "Time for puppy yoga",
+            data: { redirectUrl: "/addsession.html" }
+          });
+        } else {
+          new Notification("Puppy Yoga reminder", { body: "Time for a stretch — puppies are waiting" });
+        }
+      }, 3000);
+    });
+
+    //za kreiranje novog sessiona
+    document.getElementById("btnCreate").addEventListener("click", () => {
+      location.href = "/addsession.html";
+    });
+
+    //funkcija kojom se dohvacaju sessioni
+    async function loadSessions() {
+      const list = document.getElementById("list");
+      list.textContent = "Loading…";
+
+      try {
+        const data = await fetch("/api/sessions", { cache: "no-store" }).then(r => r.json());
+
+        if (!data.length) {
+          list.innerHTML = "<p>No sessions yet. Create one!</p>";
+          return;
+        }
+
+        list.innerHTML = data.slice(0, 6).map(s => `
+          <div class="workoutCard">
+            <div class="workoutTitle">${escapeHtml(s.breed || "Unknown breed")}</div>
+            <div class="workoutMeta">${new Date(s.ts).toLocaleString()}</div>
+            ${s.notes ? `<div class="workoutNotes">${escapeHtml(s.notes)}</div>` : ""}
+            <img class="workoutImg" src="${s.photoPath}" alt="session photo">
+          </div>
+        `).join("");
+      } catch {
+        list.textContent = "Failed to load (offline?).";
+      }
+    }
+
+    window.addEventListener("pageshow", () => loadSessions());
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSessions(); });
+    window.addEventListener("online", () => loadSessions());
+
+    //funkcija dodana da se provjeri unos pasmine i descr
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    initPushState();
+    loadSessions();
+  </script>
+</body>
+</html>

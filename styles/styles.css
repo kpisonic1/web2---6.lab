@@ -1,0 +1,190 @@
+:root{
+  --bg:#ffffff;
+  --line:#111;
+  --panel:#fff;
+  --muted:#666;
+  --card:#f7f7f7;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,Arial,sans-serif;
+  background:var(--bg);
+  color:#111
+}
+
+
+.topbar{
+  height:50px;
+  border-bottom:4px solid var(--line)
+}
+
+.layout{
+  display:grid;
+  grid-template-columns: 280px 1fr;
+  min-height:calc(100vh - 50px)
+}
+
+.sidebar{
+  padding:26px 22px;
+  border-right:4px solid var(--line);
+  background:var(--panel)
+}
+
+.content{
+  padding:26px 26px 80px
+}
+
+.dot{
+  width:38px;height:38px;border-radius:50%;
+  border:4px solid #000;
+  background:#fff;
+  display:inline-block;cursor:pointer;margin:14px 12px 0 0;
+}
+
+.dot.red{
+  background:#e02020
+}
+
+.dot.orange{
+  background:#ff8a1f
+}
+
+.dot.peach{
+  background:#ffb39a
+}
+
+.labelbox{
+  display:inline-block;
+  vertical-align:middle;
+  width:150px;
+  height:38px;
+  line-height:30px;
+  border:4px solid #000;
+  padding:0 10px;
+  margin:14px 0 0 0;
+  font-weight:600;
+}
+
+.hint{
+  margin-top:24px;
+  color:var(--muted);
+  font-size:14px
+}
+
+
+h1{
+  margin:0 0 10px 0
+}
+
+.sub{
+  color:var(--muted);
+  margin-top:4px
+}
+
+.card{
+  background:var(--card);
+  border:2px solid #ddd;
+  border-radius:14px;
+  padding:16px;
+  margin:18px 0;
+}
+
+.btn{
+  padding:10px 12px;
+  border-radius:10px;
+  border:2px solid #333;
+  background:#fff;
+  cursor:pointer;
+  text-decoration:none;
+  display:inline-block;
+}
+
+.btn.primary{
+  background:#111;
+  color:#fff
+}
+
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+  align-items:center
+}
+
+.status{
+  margin-top:10px;
+  color:#111;
+  font-weight:600
+}
+
+.workoutList{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:12px;
+  margin-top:12px
+}
+
+.workoutCard{
+  background:#fff;
+  border:2px solid #eee;
+  border-radius:14px;
+  padding:12px
+}
+
+.workoutTitle{
+  font-weight:800
+}
+
+.workoutMeta{
+  color:var(--muted);
+  font-size:13px;
+  margin:4px 0 8px
+}
+
+.workoutNotes{
+  margin:0 0 10px 0
+}
+
+.workoutImg{
+  width:100%;
+  border-radius:12px;
+  border:1px solid #eee
+}
+
+.createWrap{
+  padding:26px;
+  max-width:900px;
+  margin:0 auto
+}
+
+video, canvas{
+  width:100%;
+  border-radius:12px;
+  border:1px solid #ddd;
+  margin-top:10px
+}
+
+input, textarea{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:2px solid #ccc;
+  margin:8px 0;
+  background:#fff;
+}
+
+.d-none{
+  display:none
+}
+
+.fallback{
+  margin-top:10px;
+  padding:10px;
+  border:2px dashed #999;
+  border-radius:12px;
+  background:#fff
+}
+

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#ffffff">
+  <title>Create session - Puppy Yoga</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles/styles.css">
+</head>
+<body>
+  <div class="topbar"></div>
+
+  <main class="createWrap">
+    <a class="btn" href="/index.html">← Back</a>
+
+    <h1>Create puppy yoga session</h1>
+
+    <section class="card">
+      <h2>Photo proof</h2>
+
+      <video id="player" autoplay playsinline></video>
+
+      <div id="fallbackUpload" class="fallback d-none">
+        <p>Camera not available. Upload a photo:</p>
+        <input id="fileInput" type="file" accept="image/*" capture="environment">
+      </div>
+
+      <div class="row">
+        <button class="btn" id="btnSnap">Snap</button>
+        <button class="btn" id="btnRetake">Retake</button>
+      </div>
+
+      <canvas id="canvas"></canvas>
+      <div id="photoStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Details</h2>
+
+      <label>Enter breed at the session</label>
+      <input id="breed" placeholder="e.g. Golden Retriever">
+
+      <label>Notes</label>
+      <textarea id="notes" rows="3" placeholder="Optional"></textarea>
+
+      <div class="row">
+        <button class="btn primary" id="btnSave">Save (offline + sync)</button>
+        <button class="btn" id="btnUploadNow">Upload now</button>
+      </div>
+
+      
+      <p class="hint">
+        <strong>Offline?</strong> Use <em>Save (offline + sync)</em>.<br>
+        <strong>Online?</strong> Use <em>Upload now</em> for immediate upload.
+      </p>
+
+      <div id="saveStatus" class="status"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { set as idbSet } from "/idb.js";
+
+    const player = document.getElementById("player");
+    const canvas = document.getElementById("canvas");
+    const fileInput = document.getElementById("fileInput");
+    const fallback = document.getElementById("fallbackUpload");
+    const photoStatus = document.getElementById("photoStatus");
+    const saveStatus = document.getElementById("saveStatus");
+
+    const breedEl = document.getElementById("breed");
+    const notesEl = document.getElementById("notes");
+
+    let stream = null;
+    let lastBlob = null;
+
+    //progressive enhancement/graceful degradation: koristi kameru ako je moguce, ako ne uploadaj fallback
+    async function startCamera() {
+      if (!("mediaDevices" in navigator) || !navigator.mediaDevices.getUserMedia) {
+        fallback.classList.remove("d-none");
+        player.classList.add("d-none");
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        player.srcObject = stream;
+      } catch {
+        fallback.classList.remove("d-none");
+        player.classList.add("d-none");
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+    }
+
+    //postavio predefiniranu velicinu canvasa, snimi, pretvori u blob i zaustavi kameru
+    document.getElementById("btnSnap").addEventListener("click", () => {
+      if (!player.srcObject) {
+        photoStatus.textContent = "No camera stream. Use file upload.";
+        return;
+      }
+
+      const w = 640;
+      const h = 480;
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(player, 0, 0, w, h);
+
+      canvas.toBlob(blob => {
+        lastBlob = blob;
+        photoStatus.textContent = "Captured";
+      }, "image/png");
+
+      stopCamera();
+
+      if ("vibrate" in navigator) navigator.vibrate([120, 60, 120]);
+    });
+
+    //u slucaju da korisnik zeli opet snimiti fotografiju, a time se brise posljednji blob
+    document.getElementById("btnRetake").addEventListener("click", async () => {
+      lastBlob = null;
+      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+      photoStatus.textContent = "";
+      await startCamera();
+    });
+
+    //upload fotografiej
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        canvas.toBlob(blob => {
+          lastBlob = blob;
+          photoStatus.textContent = "Loaded";
+        }, "image/png");
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    //funkcija kojom se konstruira session
+    function buildSession() {
+      const ts = new Date().toISOString();
+      const id = ts + "_" + (breedEl.value || "unknown").replace(/\s+/g, "_");
+      return {
+        id,
+        ts,
+        breed: breedEl.value || "Unknown breed",
+        notes: notesEl.value,
+        imageBlob: lastBlob
+      };
+    }
+
+    //naposljetku uploadaj na server
+    async function uploadSession(session) {
+      const fd = new FormData();
+      fd.append("id", session.id);
+      fd.append("ts", session.ts);
+      fd.append("breed", session.breed);
+      fd.append("notes", session.notes);
+      fd.append("sessionPhoto", session.imageBlob, session.id + ".png");
+
+      const res = await fetch("/api/sessions", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+    }
+
+    //definiraj ponasanje buttona save
+    document.getElementById("btnSave").addEventListener("click", async () => {
+      if (!lastBlob) {
+        saveStatus.textContent = "Take or upload a photo first.";
+        return;
+      }
+
+      const session = buildSession();
+
+      //fix meni: ne oslanjaj se na navigator.online (cesto vraca true i kad je devtools offline),
+      //nego prvo probaj upload pa ako faila spremi u IDB + registriraj BG sync
+      try {
+        await uploadSession(session);
+        saveStatus.textContent = "Uploaded immediately (online)";
+        return;
+      } catch {
+        //upload nije uspio (offline / devtools offline / network error) -> spremi u IDB
+      }
+
+      await idbSet(session.id, session);
+
+      if ("serviceWorker" in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          if ("sync" in reg) {
+            await reg.sync.register("sync-sessions");
+            saveStatus.textContent = "Saved offline. Will sync when online.";
+          } else {
+            //graceful degradation: ako BG sync nije podrzan, korisnik mora otvoriti app kad je online
+            saveStatus.textContent = "Saved offline (no BG sync support). Open app when online to upload.";
+          }
+        } catch {
+          saveStatus.textContent = "Saved offline, but sync registration failed.";
+        }
+      } else {
+        saveStatus.textContent = "Saved offline (no Service Worker support).";
+      }
+    });
+
+    //definiraj ponasanje buttona uplload
+    document.getElementById("btnUploadNow").addEventListener("click", async () => {
+      try {
+        if (!lastBlob) {
+          saveStatus.textContent = "Take or upload a photo first.";
+          return;
+        }
+        await uploadSession(buildSession());
+        saveStatus.textContent = "Uploaded now";
+      } catch {
+        saveStatus.textContent = "Upload failed (offline). Use Save.";
+      }
+    });
+
+    startCamera();
+  </script>
+</body>
+</html>
