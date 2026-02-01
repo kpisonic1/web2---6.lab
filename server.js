@@ -6,7 +6,7 @@ const multer = require("multer");
 const webpush = require("web-push");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 app.use(express.json());
@@ -179,5 +179,6 @@ app.get("/api/testPush", async (_req, res) => {
 });
 
 
-app.listen(PORT);
+app.listen(PORT, "0.0.0.0");
+
 
