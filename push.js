@@ -59,7 +59,7 @@ export async function enablePush() {
     const reg = await getRegistration();
     if (!reg) return { ok: false, reason: "no-registration" };
 
-    /* ✅ FIX #2: if already subscribed, do NOT subscribe again */
+    
     const existingSub = await reg.pushManager.getSubscription();
     if (existingSub) {
       return { ok: true, already: true };
@@ -120,3 +120,4 @@ export async function disablePush() {
     };
   }
 }
+
